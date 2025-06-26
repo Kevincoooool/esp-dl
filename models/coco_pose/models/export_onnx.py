@@ -152,6 +152,7 @@ class ESP_YOLO(YOLO):
         )
 
 
+# 导出640尺寸的模型
 model = ESP_YOLO("yolo11n-pose.pt")
 for m in model.modules():
     if isinstance(m, Attention):
@@ -160,3 +161,33 @@ for m in model.modules():
         m.forward = ESP_Pose.forward.__get__(m)
 
 model.export(format="onnx", simplify=True, opset=13, dynamic=False, imgsz=640)
+
+# 导出320尺寸的模型
+model = ESP_YOLO("yolo11n-pose.pt")
+for m in model.modules():
+    if isinstance(m, Attention):
+        m.forward = ESP_Attention.forward.__get__(m)
+    if isinstance(m, Pose):
+        m.forward = ESP_Pose.forward.__get__(m)
+
+model.export(format="onnx", simplify=True, opset=13, dynamic=False, imgsz=320)
+
+# 导出240尺寸的模型
+model = ESP_YOLO("yolo11n-pose.pt")
+for m in model.modules():
+    if isinstance(m, Attention):
+        m.forward = ESP_Attention.forward.__get__(m)
+    if isinstance(m, Pose):
+        m.forward = ESP_Pose.forward.__get__(m)
+
+model.export(format="onnx", simplify=True, opset=13, dynamic=False, imgsz=240)
+
+# 导出200尺寸的模型
+model = ESP_YOLO("yolo11n-pose.pt")
+for m in model.modules():
+    if isinstance(m, Attention):
+        m.forward = ESP_Attention.forward.__get__(m)
+    if isinstance(m, Pose):
+        m.forward = ESP_Pose.forward.__get__(m)
+
+model.export(format="onnx", simplify=True, opset=13, dynamic=False, imgsz=200)

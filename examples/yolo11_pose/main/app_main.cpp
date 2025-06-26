@@ -14,10 +14,11 @@ extern "C" void app_main(void)
 
     dl::image::jpeg_img_t jpeg_img = {.data = (void *)bus_jpg_start, .data_len = (size_t)(bus_jpg_end - bus_jpg_start)};
     auto img = sw_decode_jpeg(jpeg_img, dl::image::DL_IMAGE_PIX_TYPE_RGB888);
-
+    
     COCOPose *pose = new COCOPose();
+    ESP_LOGI(TAG,"Start running pose detection");
     auto &pose_results = pose->run(img);
-
+    ESP_LOGI(TAG,"Pose detection finished");
     const char *kpt_names[17] = {"nose",
                                  "left eye",
                                  "right eye",

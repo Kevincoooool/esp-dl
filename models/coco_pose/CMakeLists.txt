@@ -32,7 +32,15 @@ if (NOT CONFIG_COCO_POSE_MODEL_IN_SDCARD)
     if(CONFIG_COCO_POSE_YOLO11N_POSE_S8_V2)
         list(APPEND models ${models_dir}/coco_pose_yolo11n_pose_s8_v2.espdl)
     endif()
-
+    if(CONFIG_COCO_POSE_YOLO11N_POSE_320_P4_V3)
+        list(APPEND models ${models_dir}/coco_pose_yolo11n_pose_320_p4_v3.espdl)
+    endif()
+    if(CONFIG_COCO_POSE_YOLO11N_POSE_256_P4)
+        list(APPEND models ${models_dir}/coco_pose_yolo11n_pose_256_p4.espdl)
+    endif()
+    if(CONFIG_COCO_POSE_YOLO11N_POSE_224_P4)
+        list(APPEND models ${models_dir}/coco_pose_yolo11n_pose_224_p4.espdl)
+    endif()
 
     set(pack_model_exe ${espdl_dir}/fbs_loader/pack_espdl_models.py)
     add_custom_command(

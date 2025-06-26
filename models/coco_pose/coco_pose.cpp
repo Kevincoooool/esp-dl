@@ -62,5 +62,33 @@ COCOPose::COCOPose(model_type_t model_type)
         ESP_LOGE("coco_pose", "coco_pose_yolo11n_pose_s8_v2 is not selected in menuconfig.");
 #endif
         break;
+    case model_type_t::YOLO11N_POSE_320_S8_V2:
+#if CONFIG_COCO_POSE_YOLO11N_POSE_320_S8_V2 || CONFIG_COCO_POSE_MODEL_IN_SDCARD
+        m_model = new coco_pose::Yolo11nPose("coco_pose_yolo11n_pose_320_s8_v2.espdl");
+#else
+        ESP_LOGE("coco_pose", "coco_pose_yolo11n_pose_320_s8_v2 is not selected in menuconfig.");
+#endif
+        break;
+    case model_type_t::YOLO11N_POSE_320_P4_V3:
+#if CONFIG_COCO_POSE_YOLO11N_POSE_320_P4_V3 || CONFIG_COCO_POSE_MODEL_IN_SDCARD
+        m_model = new coco_pose::Yolo11nPose("coco_pose_yolo11n_pose_320_p4_v3.espdl");
+#else
+        ESP_LOGE("coco_pose", "coco_pose_yolo11n_pose_320_p4_v3 is not selected in menuconfig.");
+#endif
+        break;
+    case model_type_t::YOLO11N_POSE_256_P4:
+#if CONFIG_COCO_POSE_YOLO11N_POSE_256_P4 || CONFIG_COCO_POSE_MODEL_IN_SDCARD
+        m_model = new coco_pose::Yolo11nPose("coco_pose_yolo11n_pose_256_p4.espdl");
+#else
+        ESP_LOGE("coco_pose", "coco_pose_yolo11n_pose_256_p4 is not selected in menuconfig.");
+#endif
+        break;
+    case model_type_t::YOLO11N_POSE_224_P4:
+#if CONFIG_COCO_POSE_YOLO11N_POSE_224_P4 || CONFIG_COCO_POSE_MODEL_IN_SDCARD
+        m_model = new coco_pose::Yolo11nPose("coco_pose_yolo11n_pose_224_p4.espdl");
+#else
+        ESP_LOGE("coco_pose", "coco_pose_yolo11n_pose_224_p4 is not selected in menuconfig.");
+#endif
+        break;
     }
 }

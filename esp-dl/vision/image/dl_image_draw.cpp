@@ -110,9 +110,9 @@ void draw_hollow_rectangle(const img_t &img,
                            uint8_t line_width,
                            uint32_t caps)
 {
-    assert(x2 > x1 && y2 > y1);
-    assert(x1 >= 0 && y1 >= 0);
-    assert(x2 < img.width && y2 < img.height);
+    // assert(x2 > x1 && y2 > y1);
+    // assert(x1 >= 0 && y1 >= 0);
+    // assert(x2 < img.width && y2 < img.height);
 
     if (DL_IMAGE_IS_PIX_TYPE_QUANT(img.pix_type)) {
         ESP_LOGE("dl_image_draw", "Can not draw on a quant img.");

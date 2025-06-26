@@ -1,0 +1,9 @@
+# ESP32-S3 Real YOLO11n-pose Posture Detection Project Partition Table
+# Name,   Type, SubType, Offset,  Size, Flags
+# Note: if you change the phy_init or app partition offset, make sure to change the offset in Kconfig.projbuild
+
+nvs,       data,  nvs,      0x9000,      24K,
+phy_init,  data,  phy,      0xf000,      4K,
+factory,   app,   factory,  0x010000,    6M,
+storage,  data, fat,     0x610000,4M, 
+coco_pose,   data,  spiffs,      ,        4M,
