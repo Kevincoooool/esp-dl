@@ -18,9 +18,61 @@
 static const char *TAG = "yolo11n-pose";
 LV_FONT_DECLARE(font_dingding)
 // 定义目标分辨率
-#define TARGET_WIDTH 224
-#define TARGET_HEIGHT 224
+#define TARGET_WIDTH 240
+#define TARGET_HEIGHT 240
 #define FRAME_BUFFER_SIZE (TARGET_WIDTH * TARGET_HEIGHT * 3)
+
+// RGB565到RGB888转换函数
+void rgb565_to_rgb888(const uint8_t *src, uint8_t *dst, int width, int height) {
+    const uint8_t *src_bytes = src;
+    uint8_t *dst_24 = dst;
+    
+    for (int i = 0; i < width * height; i++) {
+        // 读取RGB565像素（小端格式）
+        uint16_t pixel = src_bytes[i * 2] | (src_bytes[i * 2 + 1] << 8);
+        
+        // 提取RGB565的各个分量
+        uint8_t r = (pixel >> 11) & 0x1F;  // 5位红色
+        uint8_t g = (pixel >> 5) & 0x3F;   // 6位绿色
+        uint8_t b = pixel & 0x1F;          // 5位蓝色
+        
+        // 扩展到8位 - 尝试BGR顺序来修复颜色偏移问题
+        dst_24[i * 3 + 0] = (b << 3) | (b >> 2);  // B: 5位扩展到8位 
+        dst_24[i * 3 + 1] = (g << 2) | (g >> 4);  // G: 6位扩展到8位  
+        dst_24[i * 3 + 2] = (r << 3) | (r >> 2);  // R: 5位扩展到8位
+    }
+}
+
+// RGB888到RGB565转换函数（用于LVGL显示）
+void rgb888_to_rgb565(const uint8_t *src, uint8_t *dst, int width, int height) {
+    const uint8_t *src_24 = src;
+    uint8_t *dst_bytes = dst;
+    
+    for (int i = 0; i < width * height; i++) {
+        uint8_t r = src_24[i * 3 + 0];
+        uint8_t g = src_24[i * 3 + 1];
+        uint8_t b = src_24[i * 3 + 2];
+        
+        // 检查是否是BGR格式，如果是则交换R和B
+        if (src_24[i * 3 + 0] > src_24[i * 3 + 2] && i % 1000 == 0) {
+            // 这是BGR格式，交换R和B
+            uint8_t temp = r;
+            r = b;
+            b = temp;
+        }
+        
+        // 转换为RGB565格式
+        uint16_t r565 = (r >> 3) & 0x1F;   // 8位红色压缩到5位
+        uint16_t g565 = (g >> 2) & 0x3F;   // 8位绿色压缩到6位
+        uint16_t b565 = (b >> 3) & 0x1F;   // 8位蓝色压缩到5位
+        
+        uint16_t pixel565 = (r565 << 11) | (g565 << 5) | b565;
+        
+        // 以小端格式写入
+        dst_bytes[i * 2] = pixel565 & 0xFF;
+        dst_bytes[i * 2 + 1] = (pixel565 >> 8) & 0xFF;
+    }
+}
 
 // 显示模式控制宏定义
 #define CONTINUOUS_REFRESH_MODE     1    // 1: 持续刷新摄像头画面, 0: 检测到人体后暂停刷新
@@ -472,10 +524,11 @@ static void detect_task(void *arg)
 #if FREEZE_ON_DETECTION
                     // 如果开启冻结模式，保存当前帧到冻结缓冲区
                     if (frozen_frame_buffer == NULL) {
+                        // 现在统一使用RGB888格式，分配相应大小的缓冲区
                         frozen_frame_buffer = (uint8_t *)heap_caps_malloc(FRAME_BUFFER_SIZE, MALLOC_CAP_SPIRAM);
                     }
                     if (frozen_frame_buffer != NULL) {
-                        memcpy(frozen_frame_buffer, frame.buffer, FRAME_BUFFER_SIZE);
+                        memcpy(frozen_frame_buffer, frame.buffer, frame.size);
                         freeze_display = true;
                     }
 #endif
@@ -691,15 +744,21 @@ static void camera_task(void *arg)
     ESP_ERROR_CHECK(ksdiy_camera_get_resolution(&camera_width, &camera_height));
     ESP_LOGI(TAG, "摄像头分辨率: %ldx%ld", camera_width, camera_height);
 
-    // 创建目标图像缓冲区
-    uint8_t *resized_buffer = (uint8_t *)heap_caps_malloc(FRAME_BUFFER_SIZE, MALLOC_CAP_SPIRAM);
-    uint8_t *display_buffer = (uint8_t *)heap_caps_malloc(FRAME_BUFFER_SIZE, MALLOC_CAP_SPIRAM);
+    // 创建图像缓冲区
+    uint8_t *rgb888_buffer = (uint8_t *)heap_caps_malloc(camera_width * camera_height * 3, MALLOC_CAP_SPIRAM);  // RGB888格式的原始图像
+    uint8_t *resized_buffer = (uint8_t *)heap_caps_malloc(FRAME_BUFFER_SIZE, MALLOC_CAP_SPIRAM);               // 缩放后的RGB888图像
+    uint8_t *display_buffer_rgb888 = (uint8_t *)heap_caps_malloc(FRAME_BUFFER_SIZE, MALLOC_CAP_SPIRAM);        // 显示用RGB888图像
+    uint8_t *display_buffer_rgb565 = (uint8_t *)heap_caps_malloc(TARGET_WIDTH * TARGET_HEIGHT * 2, MALLOC_CAP_SPIRAM); // 显示用RGB565图像
 
-    if (resized_buffer == NULL || display_buffer == NULL) {
+    if (rgb888_buffer == NULL || resized_buffer == NULL || display_buffer_rgb888 == NULL || display_buffer_rgb565 == NULL) {
         ESP_LOGE(TAG, "Failed to allocate buffer");
         vTaskDelete(NULL);
         return;
     }
+
+    ESP_LOGI(TAG, "摄像头任务启动，缓冲区分配成功");
+    ESP_LOGI(TAG, "RGB888缓冲区大小: %ld bytes", camera_width * camera_height * 3);
+    ESP_LOGI(TAG, "目标缓冲区大小: %d bytes", FRAME_BUFFER_SIZE);
 
     while (1) {
         esp_err_t ret = ksdiy_camera_get_frame(&camera_buffer, &camera_size, &camera_format);
@@ -711,13 +770,26 @@ static void camera_task(void *arg)
 
         frame_count++;
 
-        // 如果摄像头分辨率已经是目标分辨率，直接使用
+        // 格式转换：从RGB565转换为RGB888
+        if (camera_format == KSDIY_VIDEO_FMT_RGB565) {
+            rgb565_to_rgb888(camera_buffer, rgb888_buffer, camera_width, camera_height);
+        } else if (camera_format == KSDIY_VIDEO_FMT_RGB888) {
+            // 如果摄像头已经是RGB888格式，直接复制
+            memcpy(rgb888_buffer, camera_buffer, camera_width * camera_height * 3);
+        } else {
+            ESP_LOGW(TAG, "不支持的像素格式: 0x%08lx", (uint32_t)camera_format);
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
+
+        // 处理图像缩放
         if (camera_width == TARGET_WIDTH && camera_height == TARGET_HEIGHT) {
-            memcpy(display_buffer, camera_buffer, FRAME_BUFFER_SIZE);
-            memcpy(resized_buffer, camera_buffer, FRAME_BUFFER_SIZE);
+            // 分辨率匹配，直接复制
+            memcpy(display_buffer_rgb888, rgb888_buffer, FRAME_BUFFER_SIZE);
+            memcpy(resized_buffer, rgb888_buffer, FRAME_BUFFER_SIZE);
         } else {
             // 需要缩放
-            dl::image::img_t src_img = {.data = camera_buffer,
+            dl::image::img_t src_img = {.data = rgb888_buffer,
                                         .width = (uint16_t)camera_width,
                                         .height = (uint16_t)camera_height,
                                         .pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB888};
@@ -729,26 +801,29 @@ static void camera_task(void *arg)
 
             // 执行图像缩放
             dl::image::resize(src_img, dst_img, dl::image::DL_IMAGE_INTERPOLATE_BILINEAR);
-            memcpy(display_buffer, resized_buffer, FRAME_BUFFER_SIZE);
+            memcpy(display_buffer_rgb888, resized_buffer, FRAME_BUFFER_SIZE);
         }
 
+        // 直接使用RGB888格式用于LVGL显示（不再需要转换为RGB565）
+        // rgb888_to_rgb565(display_buffer_rgb888, display_buffer_rgb565, TARGET_WIDTH, TARGET_HEIGHT);
+
         // 准备显示帧
-        frame_buffer_t display_frame = {.buffer = display_buffer,
+        frame_buffer_t display_frame = {.buffer = display_buffer_rgb888,
                                         .width = TARGET_WIDTH,
                                         .height = TARGET_HEIGHT,
-                                        .size = FRAME_BUFFER_SIZE,
-                                        .format = camera_format};
+                                        .size = FRAME_BUFFER_SIZE,  // RGB888大小
+                                        .format = KSDIY_VIDEO_FMT_RGB888}; // 显示格式为RGB888
 
         // 发送帧到显示队列
         xQueueOverwrite(display_queue, &display_frame);
 
-        // 每20帧发送一次到检测队列
+        // 每5帧发送一次到检测队列
         if (frame_count % 5 == 0) {
             frame_buffer_t detect_frame = {.buffer = resized_buffer,
                                            .width = TARGET_WIDTH,
                                            .height = TARGET_HEIGHT,
                                            .size = FRAME_BUFFER_SIZE,
-                                           .format = camera_format};
+                                           .format = KSDIY_VIDEO_FMT_RGB888}; // 检测格式固定为RGB888
             xQueueOverwrite(detect_queue, &detect_frame);
         }
 
@@ -761,7 +836,7 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "ESP32-P4 姿态检测系统启动");
 
     // 初始化摄像头
-    ESP_ERROR_CHECK(ksdiy_camera_init(KSDIY_VIDEO_FMT_RGB888));
+    ESP_ERROR_CHECK(ksdiy_camera_init(KSDIY_VIDEO_FMT_RGB565));
 
     // 初始化LVGL
     ksdiy_lvgl_port_init();
@@ -770,11 +845,11 @@ extern "C" void app_main(void)
     uint32_t width, height;
     ESP_ERROR_CHECK(ksdiy_camera_get_resolution(&width, &height));
     ESP_LOGI(TAG, "摄像头分辨率: %ldx%ld", width, height);
-    // 配置图像描述符（使用目标分辨率）
+    // 配置图像描述符（使用RGB888格式）
     camera_img_desc.header.cf = LV_COLOR_FORMAT_RGB888;
     camera_img_desc.header.w = TARGET_WIDTH;
     camera_img_desc.header.h = TARGET_HEIGHT;
-    camera_img_desc.data_size = FRAME_BUFFER_SIZE;
+    camera_img_desc.data_size = FRAME_BUFFER_SIZE;  // RGB888大小
     camera_img_desc.data = NULL;
     
     if (ksdiy_lvgl_lock(10)) {
